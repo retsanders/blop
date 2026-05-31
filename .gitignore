@@ -1,0 +1,39 @@
+# Xcode build output
+build/
+DerivedData/
+*.xcarchive
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Xcode user data
+xcuserdata/
+*.xccheckout
+*.xcscmblueprint
+
+# xcodegen — generated from project.yml, do not commit
+Blop.xcodeproj/
+
+# Claude Code project settings and planning files
+.claude/
+roadmap.md
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# CocoaPods (not used, but just in case)
+Pods/
+*.xcworkspace
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.Spotlight-V100
+.Trashes
+
+# Instruments
+*.trace
