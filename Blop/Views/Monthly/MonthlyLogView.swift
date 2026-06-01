@@ -281,13 +281,16 @@ private struct JumpButton: View {
     var body: some View {
         Button(action: action) {
             HStack(spacing: BlopSpacing.xs) {
-                if let icon {
-                    Image(systemName: icon)
-                        .font(.system(size: 12))
-                } else if let signifier {
-                    Text(signifier)
-                        .font(BlopFont.signifier)
+                Group {
+                    if let icon {
+                        Image(systemName: icon)
+                            .font(.system(size: 14))
+                    } else if let signifier {
+                        Text(signifier)
+                            .font(.system(size: 14, weight: .medium))
+                    }
                 }
+                .frame(width: 14, height: 14, alignment: .center)
                 Text(label)
                     .font(BlopFont.mono(12))
             }

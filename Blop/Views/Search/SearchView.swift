@@ -3,8 +3,10 @@ import SwiftData
 
 struct SearchView: View {
     @Environment(\.modelContext) private var context
+    @Query(sort: \Collection.sortOrder) private var collections: [Collection]
     @State private var query = ""
     @State private var results: [SearchResult] = []
+    @State private var selectedCollection: Collection? = nil
 
     var body: some View {
         ZStack {
@@ -16,7 +18,7 @@ struct SearchView: View {
                 Divider().background(BlopColor.faint)
 
                 if query.count < 2 {
-                    emptyPrompt("Search across all entries")
+                    collectionsSection
                 } else if results.isEmpty {
                     emptyPrompt("No results for \"\(query)\"")
                 } else {
@@ -25,6 +27,9 @@ struct SearchView: View {
             }
         }
         .onChange(of: query) { runSearch() }
+        .sheet(item: $selectedCollection) { coll in
+            CollectionDetailView(collection: coll)
+        }
     }
 
     // MARK: - Search Bar
@@ -47,6 +52,58 @@ struct SearchView: View {
         }
         .padding(.horizontal, BlopSpacing.md)
         .padding(.vertical, BlopSpacing.sm)
+    }
+
+    // MARK: - Collections Section (idle state)
+
+    private var collectionsSection: some View {
+        ScrollView {
+            LazyVStack(alignment: .leading, spacing: 0) {
+                if collections.isEmpty {
+                    Text("Search across all entries")
+                        .font(BlopFont.body(14))
+                        .foregroundStyle(BlopColor.faint)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.top, BlopSpacing.xl)
+                } else {
+                    sectionHeader("COLLECTIONS")
+                    ForEach(collections) { coll in
+                        Button {
+                            selectedCollection = coll
+                        } label: {
+                            HStack(spacing: BlopSpacing.md) {
+                                Image(systemName: coll.symbol)
+                                    .font(.system(size: 16))
+                                    .foregroundStyle(BlopColor.accent)
+                                    .frame(width: 24, alignment: .center)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(coll.title)
+                                        .font(BlopFont.body())
+                                        .foregroundStyle(BlopColor.ink)
+                                    Text("\(coll.entries.count) \(coll.entries.count == 1 ? "entry" : "entries")")
+                                        .font(BlopFont.mono(10))
+                                        .foregroundStyle(BlopColor.faint)
+                                }
+                                Spacer()
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(BlopColor.faint)
+                            }
+                            .padding(.horizontal, BlopSpacing.md)
+                            .padding(.vertical, BlopSpacing.sm)
+                        }
+                        .buttonStyle(.plain)
+                        Divider().background(BlopColor.faint).padding(.leading, BlopSpacing.md + 40)
+                    }
+
+                    Text("Type to search all entries")
+                        .font(BlopFont.body(13))
+                        .foregroundStyle(BlopColor.faint)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.top, BlopSpacing.lg)
+                }
+            }
+        }
     }
 
     // MARK: - Results

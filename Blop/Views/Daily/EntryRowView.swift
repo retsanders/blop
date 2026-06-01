@@ -69,7 +69,7 @@ struct EntryRowView: View {
             if isExpanded {
                 actionPanel
                     .transition(.asymmetric(
-                        insertion: .opacity.combined(with: .move(edge: .bottom)),
+                        insertion: .scale(scale: 0.95, anchor: .top).combined(with: .opacity),
                         removal: .opacity
                     ))
                     .zIndex(0)
@@ -181,10 +181,6 @@ struct EntryRowView: View {
         isEditFocused = false
     }
 
-    private func postSignifierToast(_ label: String) {
-        NotificationCenter.default.post(name: .signifierToast, object: label)
-    }
-
     // MARK: - Action Panel
 
     private var actionPanel: some View {
@@ -195,9 +191,14 @@ struct EntryRowView: View {
                     if item.collapseAfter { collapse() }
                 } label: {
                     VStack(spacing: 2) {
-                        Text(item.symbol)
-                            .font(BlopFont.signifier)
-                            .strikethrough(item.strikethrough, color: item.color)
+                        if let sf = item.sfSymbol {
+                            Image(systemName: sf)
+                                .font(.system(size: 14))
+                        } else {
+                            Text(item.symbol)
+                                .font(BlopFont.signifier)
+                                .strikethrough(item.strikethrough, color: item.color)
+                        }
                         Text(item.label)
                             .font(BlopFont.mono(9))
                     }
@@ -241,16 +242,14 @@ struct EntryRowView: View {
 
         if entry.type != .event && entry.status != .cancelled {
             let next = nextSignifier(after: entry.signifier)
-            let sigSymbol = entry.signifier?.character ?? "◌"
+            let sigIcon = entry.signifier?.icon ?? "circle"
             let sigLabel = entry.signifier?.label ?? "Signifier"
             items.append(PanelAction(
-                symbol: sigSymbol,
+                symbol: "",
+                sfSymbol: sigIcon,
                 label: sigLabel,
                 collapseAfter: false,
-                action: {
-                    onSetSignifier(next)
-                    postSignifierToast(next?.label ?? "No Signifier")
-                }
+                action: { onSetSignifier(next) }
             ))
         }
 
@@ -434,6 +433,7 @@ private struct DestinationPickerSheet: View {
 
 private struct PanelAction {
     let symbol: String
+    var sfSymbol: String? = nil
     let label: String
     var color: Color = BlopColor.ink
     var strikethrough: Bool = false

@@ -219,6 +219,19 @@ Review is no longer a tab — it opens as a sheet from the chart icon button in 
 
 Views subscribe with `.onReceive(NotificationCenter.default.publisher(for: .goToToday))`.
 
+### Tab selection persistence
+`ContentView` uses `@SceneStorage("selectedTab")` (not `@State`) so the selected tab survives view identity changes caused by `@AppStorage` theme changes.
+
+### Signifier toast
+`Notification.Name.signifierToast` (defined in `TabReselection.swift`) is posted by `RapidEntryBar` when the signifier cycle button is tapped. `ContentView` listens and shows a bottom-of-screen toast overlay. Do **not** post this from `EntryRowView` — the panel changes signifier silently.
+
+### Schedule destination
+`ScheduleDestination` enum (in `EntryRowView.swift`) has two cases:
+- `.month(Date)` — schedule to a monthly log
+- `.collection(Collection)` — move entry to a collection
+
+`EntryRowView.onSchedule: (ScheduleDestination) -> Void`. Call sites that don't support scheduling use `{ _ in }`.
+
 ### Entry action surfaces
 `EntryRowView` exposes actions via:
 1. Leading swipe — complete/reopen (tasks only, not events)
@@ -229,7 +242,10 @@ Views subscribe with `.onReceive(NotificationCenter.default.publisher(for: .goTo
 `EntryRowView` signature uses `onSetSignifier: (EntrySignifier?) -> Void` (not `onTogglePriority`).
 
 ### RapidEntryBar signifier
-The entry bar has a cycle button (not a toggle) that rotates: `nil → ★ → ! → ✦ → nil`. Its binding is `signifier: Binding<EntrySignifier?>`. The `onSubmit` closure signature is `(String, EntryType, EntrySignifier?, Date?)`.
+The entry bar has a cycle button (SF Symbol in a circular background) that rotates: `nil → priority → inspiration → explore → nil`. Its binding is `signifier: Binding<EntrySignifier?>`. Tapping posts `.signifierToast` via `NotificationCenter`. The `onSubmit` closure signature is `(String, EntryType, EntrySignifier?, Date?)`.
+
+### SearchView idle state
+When the search query is fewer than 2 characters, `SearchView` shows a Collections list (all user-defined collections with entry counts). Tapping a collection opens `CollectionDetailView` in a sheet. Full-text search activates at 2+ characters.
 
 ### SwiftData queries
 `#Predicate` macros can't use enum member access inline — fetch all entries and filter in Swift instead.

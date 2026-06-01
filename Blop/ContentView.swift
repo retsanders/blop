@@ -2,7 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @AppStorage("themePreference") private var themePreference: String = "system"
-    @State private var selectedTab = 0
+    @SceneStorage("selectedTab") private var selectedTab: Int = 0
     @State private var toastMessage: String? = nil
 
     private var preferredColorScheme: ColorScheme? {

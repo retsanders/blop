@@ -11,6 +11,19 @@ struct RapidEntryBar: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            // Done button row — visible in the UI above the bar when keyboard is open
+            if isFocused {
+                HStack {
+                    Spacer()
+                    Button("Done") { isFocused = false }
+                        .font(BlopFont.mono(13))
+                        .foregroundStyle(BlopColor.accent)
+                        .padding(.horizontal, BlopSpacing.md)
+                        .padding(.vertical, BlopSpacing.xs)
+                }
+                .background(BlopColor.background)
+            }
+
             Divider().background(BlopColor.faint)
 
             // Text field row
@@ -21,14 +34,6 @@ struct RapidEntryBar: View {
                     .focused($isFocused)
                     .submitLabel(.done)
                     .onSubmit(submitIfNeeded)
-                    .toolbar {
-                        ToolbarItemGroup(placement: .keyboard) {
-                            Spacer()
-                            Button("Done") { isFocused = false }
-                                .font(BlopFont.mono(14))
-                                .foregroundStyle(BlopColor.accent)
-                        }
-                    }
 
                 if !text.isEmpty {
                     Button(action: submitIfNeeded) {
@@ -61,9 +66,9 @@ struct RapidEntryBar: View {
                 }
                 Spacer()
                 Button {
-                    withAnimation(.easeInOut(duration: 0.15)) {
-                        signifier = nextSignifier(after: signifier)
-                    }
+                    let next = nextSignifier(after: signifier)
+                    withAnimation(.easeInOut(duration: 0.15)) { signifier = next }
+                    NotificationCenter.default.post(name: .signifierToast, object: next?.label ?? "No Signifier")
                 } label: {
                     ZStack {
                         Circle()
@@ -84,6 +89,7 @@ struct RapidEntryBar: View {
         }
         .background(BlopColor.background)
         .animation(.easeInOut(duration: 0.2), value: selectedType)
+        .animation(.easeInOut(duration: 0.15), value: isFocused)
     }
 
     private var signifierColor: Color {
