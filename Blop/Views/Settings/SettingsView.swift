@@ -23,6 +23,7 @@ struct SettingsView: View {
             Form {
                 themeSection
                 habitsSection
+                collectionsSection
                 migrationSection
                 exportSection
                 gitSection
@@ -75,6 +76,18 @@ struct SettingsView: View {
             }
         } header: {
             Text("HABITS")
+                .font(BlopFont.sectionHeader)
+        }
+    }
+
+    private var collectionsSection: some View {
+        Section {
+            NavigationLink(destination: CollectionsManagementView()) {
+                Label("Manage Collections", systemImage: "folder.fill")
+                    .foregroundStyle(BlopColor.ink)
+            }
+        } header: {
+            Text("COLLECTIONS")
                 .font(BlopFont.sectionHeader)
         }
     }

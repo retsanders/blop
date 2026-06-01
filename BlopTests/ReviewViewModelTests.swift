@@ -9,7 +9,7 @@ struct ReviewViewModelTests {
     private func makeContainer() throws -> ModelContainer {
         try ModelContainer(
             for: BulletEntry.self, DailyLog.self, MonthlyLog.self,
-                HabitDefinition.self, HabitCompletion.self,
+                HabitDefinition.self, HabitCompletion.self, Collection.self,
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)
         )
     }

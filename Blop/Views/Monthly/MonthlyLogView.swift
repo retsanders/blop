@@ -6,9 +6,10 @@ struct MonthlyLogView: View {
     @State private var viewModel = MonthlyLogViewModel()
     @State private var monthlyLog: MonthlyLog?
     @State private var carryForwardEntries: [BulletEntry] = []
+    @State private var showReview = false
     @State private var newEntryText = ""
     @State private var newEntryType: EntryType = .task
-    @State private var newEntryPriority = false
+    @State private var newEntrySignifier: EntrySignifier? = nil
     @State private var newEventDate = Date()
     @State private var activeDates: Set<Date> = []
     @State private var expandedEntryID: UUID? = nil
@@ -24,7 +25,31 @@ struct MonthlyLogView: View {
                 monthHeader
                 Divider().background(BlopColor.faint)
 
+                // Pinned: day strip
+                MonthlyDayStrip(
+                    year: viewModel.selectedYear,
+                    month: viewModel.selectedMonth,
+                    activeDates: activeDates,
+                    onSelectDate: { _ in }
+                )
+                Divider().background(BlopColor.faint)
+
                 ScrollViewReader { proxy in
+                    // Pinned: jump buttons + review
+                    HStack(spacing: BlopSpacing.sm) {
+                        JumpButton(signifier: "•", label: "Tasks") {
+                            withAnimation { proxy.scrollTo("tasks", anchor: .top) }
+                        }
+                        JumpButton(signifier: "○", label: "Events") {
+                            withAnimation { proxy.scrollTo("events", anchor: .top) }
+                        }
+                        Spacer()
+                        JumpButton(icon: "chart.bar", label: "Review") { showReview = true }
+                    }
+                    .padding(.horizontal, BlopSpacing.md)
+                    .padding(.vertical, BlopSpacing.sm)
+                    Divider().background(BlopColor.faint)
+
                     ScrollView {
                         LazyVStack(alignment: .leading, spacing: 0) {
                             if let log = monthlyLog {
@@ -35,27 +60,6 @@ struct MonthlyLogView: View {
                                     onMigrate: { migrateToThisMonth($0, log: log) },
                                     onDrop: { $0.status = .cancelled }
                                 )
-
-                                MonthlyDayStrip(
-                                    year: viewModel.selectedYear,
-                                    month: viewModel.selectedMonth,
-                                    activeDates: activeDates,
-                                    onSelectDate: { _ in }
-                                )
-                                Divider().background(BlopColor.faint)
-
-                                // Jump buttons
-                                HStack(spacing: BlopSpacing.sm) {
-                                    JumpButton(signifier: "•", label: "Tasks") {
-                                        withAnimation { proxy.scrollTo("tasks", anchor: .top) }
-                                    }
-                                    JumpButton(signifier: "○", label: "Events") {
-                                        withAnimation { proxy.scrollTo("events", anchor: .top) }
-                                    }
-                                    Spacer()
-                                }
-                                .padding(.horizontal, BlopSpacing.md)
-                                .padding(.vertical, BlopSpacing.sm)
 
                                 // Tasks section
                                 sectionHeader("TASKS")
@@ -75,11 +79,14 @@ struct MonthlyLogView: View {
                 RapidEntryBar(
                     text: $newEntryText,
                     selectedType: $newEntryType,
-                    isPriority: $newEntryPriority,
+                    signifier: $newEntrySignifier,
                     eventDate: $newEventDate,
                     onSubmit: addEntry
                 )
             }
+        }
+        .sheet(isPresented: $showReview) {
+            MonthlyReviewView()
         }
         .onAppear { load() }
         .onDisappear { newEntryType = .task }
@@ -132,8 +139,9 @@ struct MonthlyLogView: View {
                     threshold: threshold,
                     onToggleComplete: { task.status = task.status == .complete ? .open : .complete },
                     onCancel: { task.status = .cancelled },
-                    onTogglePriority: { task.isPriority.toggle() },
-                    onSchedule: {},
+                    onRestore: { task.status = .open },
+                    onSetSignifier: { task.signifier = $0 },
+                    onSchedule: { _ in },
                     onDelete: { context.delete(task) },
                     expandedEntryID: $expandedEntryID
                 )
@@ -165,8 +173,9 @@ struct MonthlyLogView: View {
                         threshold: threshold,
                         onToggleComplete: { event.status = event.status == .complete ? .open : .complete },
                         onCancel: { event.status = .cancelled },
-                        onTogglePriority: { event.isPriority.toggle() },
-                        onSchedule: {},
+                        onRestore: { event.status = .open },
+                        onSetSignifier: { event.signifier = $0 },
+                        onSchedule: { _ in },
                         onDelete: { context.delete(event) },
                         expandedEntryID: $expandedEntryID
                     )
@@ -231,7 +240,7 @@ struct MonthlyLogView: View {
         load()
     }
 
-    private func addEntry(text: String, type: EntryType, priority: Bool, date: Date?) {
+    private func addEntry(text: String, type: EntryType, signifier: EntrySignifier?, date: Date?) {
         guard let log = monthlyLog else { return }
         let entry = BulletEntry(
             content: text,
@@ -239,7 +248,7 @@ struct MonthlyLogView: View {
             sortOrder: log.entries.count,
             scheduledDate: date
         )
-        entry.isPriority = priority
+        entry.signifier = signifier
         entry.monthlyLog = log
         context.insert(entry)
         newEventDate = Date()
@@ -264,15 +273,21 @@ struct MonthlyLogView: View {
 // MARK: - Jump Button
 
 private struct JumpButton: View {
-    let signifier: String
+    var signifier: String? = nil
+    var icon: String? = nil
     let label: String
     let action: () -> Void
 
     var body: some View {
         Button(action: action) {
             HStack(spacing: BlopSpacing.xs) {
-                Text(signifier)
-                    .font(BlopFont.signifier)
+                if let icon {
+                    Image(systemName: icon)
+                        .font(.system(size: 12))
+                } else if let signifier {
+                    Text(signifier)
+                        .font(BlopFont.signifier)
+                }
                 Text(label)
                     .font(BlopFont.mono(12))
             }

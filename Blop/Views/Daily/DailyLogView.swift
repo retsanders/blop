@@ -10,20 +10,12 @@ struct DailyLogView: View {
     @State private var previousLog: DailyLog?
     @State private var newEntryText = ""
     @State private var newEntryType: EntryType = .task
-    @State private var newEntryPriority = false
+    @State private var newEntrySignifier: EntrySignifier? = nil
     @State private var newEventDate = Date()
     @State private var todayMonthlyEvents: [BulletEntry] = []
     @State private var expandedEntryID: UUID? = nil
 
     @AppStorage("migrationThreshold") private var threshold: Int = 3
-
-    private var currentMonthLog: MonthlyLog {
-        let cal = Calendar.current
-        let year = cal.component(.year, from: viewModel.selectedDate)
-        let month = cal.component(.month, from: viewModel.selectedDate)
-        let vm = MonthlyLogViewModel()
-        return vm.fetchOrCreate(year: year, month: month, context: context)
-    }
 
     // Merges daily log entries with any events from the monthly log scheduled today.
     private var allDisplayEntries: [BulletEntry] {
@@ -49,7 +41,13 @@ struct DailyLogView: View {
                                     entries: open,
                                     threshold: threshold,
                                     onMigrate: { migrate($0) },
-                                    onSchedule: { schedule($0) },
+                                    onSchedule: { entry in
+                                        let cal = Calendar.current
+                                        let now = Date()
+                                        let comps = cal.dateComponents([.year, .month], from: now)
+                                        let firstOfMonth = cal.date(from: comps) ?? now
+                                        schedule(entry, scheduledFor: firstOfMonth)
+                                    },
                                     onDrop: { viewModel.drop($0) }
                                 )
                             }
@@ -72,8 +70,9 @@ struct DailyLogView: View {
                                     threshold: threshold,
                                     onToggleComplete: { viewModel.toggleComplete(entry) },
                                     onCancel: { viewModel.cancel(entry) },
-                                    onTogglePriority: { entry.isPriority.toggle() },
-                                    onSchedule: { schedule(entry) },
+                                    onRestore: { entry.status = .open },
+                                    onSetSignifier: { entry.signifier = $0 },
+                                    onSchedule: { date in schedule(entry, scheduledFor: date) },
                                     onDelete: { context.delete(entry) },
                                     expandedEntryID: $expandedEntryID
                                 )
@@ -91,7 +90,7 @@ struct DailyLogView: View {
                 RapidEntryBar(
                     text: $newEntryText,
                     selectedType: $newEntryType,
-                    isPriority: $newEntryPriority,
+                    signifier: $newEntrySignifier,
                     eventDate: $newEventDate,
                     onSubmit: addEntry
                 )
@@ -178,11 +177,10 @@ struct DailyLogView: View {
         }
     }
 
-    private func addEntry(text: String, type: EntryType, priority: Bool, date: Date?) {
+    private func addEntry(text: String, type: EntryType, signifier: EntrySignifier?, date: Date?) {
         guard let log = currentLog else { return }
 
         if type == .event {
-            // All events go to the monthly log, keyed by their scheduledDate.
             let scheduledDate = date ?? viewModel.selectedDate
             let cal = Calendar.current
             let year = cal.component(.year, from: scheduledDate)
@@ -195,7 +193,7 @@ struct DailyLogView: View {
                 sortOrder: monthLog.entries.count,
                 scheduledDate: scheduledDate
             )
-            entry.isPriority = priority
+            entry.signifier = signifier
             entry.monthlyLog = monthLog
             context.insert(entry)
             newEventDate = Date()
@@ -203,7 +201,7 @@ struct DailyLogView: View {
             return
         }
 
-        viewModel.addEntry(content: text, type: type, priority: priority, scheduledDate: nil, to: log, context: context)
+        viewModel.addEntry(content: text, type: type, signifier: signifier, scheduledDate: nil, to: log, context: context)
         newEventDate = Date()
     }
 
@@ -212,7 +210,12 @@ struct DailyLogView: View {
         viewModel.migrate(entry, to: log, context: context)
     }
 
-    private func schedule(_ entry: BulletEntry) {
-        viewModel.schedule(entry, monthlyLog: currentMonthLog, context: context)
+    private func schedule(_ entry: BulletEntry, scheduledFor date: Date) {
+        let cal = Calendar.current
+        let year = cal.component(.year, from: date)
+        let month = cal.component(.month, from: date)
+        let vm = MonthlyLogViewModel()
+        let log = vm.fetchOrCreate(year: year, month: month, context: context)
+        viewModel.schedule(entry, monthlyLog: log, context: context)
     }
 }

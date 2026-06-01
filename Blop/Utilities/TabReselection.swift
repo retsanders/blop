@@ -4,6 +4,7 @@ import SwiftUI
 extension Notification.Name {
     static let goToToday = Notification.Name("blop.goToToday")
     static let goToCurrentMonth = Notification.Name("blop.goToCurrentMonth")
+    static let goToFutureLog = Notification.Name("blop.goToFutureLog")
 }
 
 /// Invisible UIView that walks the responder chain to find the UITabBarController
@@ -54,6 +55,7 @@ private final class TabReselectDelegate: NSObject, UITabBarControllerDelegate {
             switch tabBarController.selectedIndex {
             case 0: NotificationCenter.default.post(name: .goToToday, object: nil)
             case 1: NotificationCenter.default.post(name: .goToCurrentMonth, object: nil)
+            case 2: NotificationCenter.default.post(name: .goToFutureLog, object: nil)
             default: break
             }
         }

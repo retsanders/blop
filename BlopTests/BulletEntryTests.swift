@@ -9,7 +9,7 @@ struct BulletEntryTests {
     private func makeContainer() throws -> ModelContainer {
         try ModelContainer(
             for: BulletEntry.self, DailyLog.self, MonthlyLog.self,
-                HabitDefinition.self, HabitCompletion.self,
+                HabitDefinition.self, HabitCompletion.self, Collection.self,
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)
         )
     }
@@ -51,23 +51,23 @@ struct BulletEntryTests {
     @Test("signifier returns correct characters for each status")
     func signifierCharacters() {
         let task = BulletEntry(content: "t", type: .task)
-        #expect(task.signifier(atThreshold: 3) == "•")
+        #expect(task.bulletCharacter(atThreshold: 3) == "•")
 
         task.status = .complete
-        #expect(task.signifier(atThreshold: 3) == "✕")
+        #expect(task.bulletCharacter(atThreshold: 3) == "✕")
 
         task.status = .migrated
         task.migrationCount = 2
-        #expect(task.signifier(atThreshold: 3) == ">")
+        #expect(task.bulletCharacter(atThreshold: 3) == ">")
 
         task.migrationCount = 3
-        #expect(task.signifier(atThreshold: 3) == "⚠")
+        #expect(task.bulletCharacter(atThreshold: 3) == "⚠")
 
         let event = BulletEntry(content: "e", type: .event)
-        #expect(event.signifier(atThreshold: 3) == "○")
+        #expect(event.bulletCharacter(atThreshold: 3) == "○")
 
         let note = BulletEntry(content: "n", type: .note)
-        #expect(note.signifier(atThreshold: 3) == "–")
+        #expect(note.bulletCharacter(atThreshold: 3) == "–")
     }
 
     @Test("Cancelling an entry sets status to cancelled")
@@ -75,5 +75,42 @@ struct BulletEntryTests {
         let entry = BulletEntry(content: "Task to cancel")
         entry.status = .cancelled
         #expect(entry.status == .cancelled)
+    }
+
+    @Test("bulletCharacter returns < for scheduled status")
+    func scheduledCharacter() {
+        let entry = BulletEntry(content: "Scheduled task", type: .task)
+        entry.status = .scheduled
+        #expect(entry.bulletCharacter(atThreshold: 3) == "<")
+    }
+
+    @Test("EntrySignifier character, label and icon are correct for all cases")
+    func signifierProperties() {
+        #expect(EntrySignifier.priority.character == "★")
+        #expect(EntrySignifier.inspiration.character == "⚡")
+        #expect(EntrySignifier.explore.character == "✦")
+
+        #expect(EntrySignifier.priority.label == "Priority")
+        #expect(EntrySignifier.inspiration.label == "Inspiration")
+        #expect(EntrySignifier.explore.label == "Explore")
+
+        #expect(EntrySignifier.priority.icon == "star.fill")
+        #expect(EntrySignifier.inspiration.icon == "bolt.fill")
+        #expect(EntrySignifier.explore.icon == "diamond.fill")
+    }
+
+    @Test("migratedForward preserves signifier on copy")
+    func migratedForwardPreservesSignifier() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let log = DailyLog(date: Date())
+        context.insert(log)
+
+        let entry = BulletEntry(content: "Inspired idea", type: .task)
+        entry.signifier = .inspiration
+        context.insert(entry)
+
+        let copy = entry.migratedForward(into: log)
+        #expect(copy.signifier == .inspiration)
     }
 }

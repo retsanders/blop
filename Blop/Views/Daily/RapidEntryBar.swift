@@ -3,9 +3,9 @@ import SwiftUI
 struct RapidEntryBar: View {
     @Binding var text: String
     @Binding var selectedType: EntryType
-    @Binding var isPriority: Bool
+    @Binding var signifier: EntrySignifier?
     @Binding var eventDate: Date
-    let onSubmit: (String, EntryType, Bool, Date?) -> Void
+    let onSubmit: (String, EntryType, EntrySignifier?, Date?) -> Void
 
     @FocusState private var isFocused: Bool
 
@@ -34,41 +34,47 @@ struct RapidEntryBar: View {
             .padding(.top, BlopSpacing.sm)
             .padding(.bottom, BlopSpacing.xs)
 
-            // Date picker row (events only)
-            if selectedType == .event {
-                HStack {
-                    Image(systemName: "calendar")
-                        .font(.caption)
-                        .foregroundStyle(BlopColor.accent)
-                    DatePicker("", selection: $eventDate, displayedComponents: .date)
-                        .labelsHidden()
-                        .font(BlopFont.mono(13))
-                        .tint(BlopColor.accent)
-                    Spacer()
-                }
-                .padding(.horizontal, BlopSpacing.md)
-                .padding(.bottom, BlopSpacing.xs)
-                .transition(.move(edge: .top).combined(with: .opacity))
-            }
-
-            // Type strip + priority toggle
+            // Type strip + signifier cycle button
             HStack(spacing: 0) {
                 ForEach([EntryType.task, .note, .event], id: \.self) { type in
-                    TypeChip(type: type, isSelected: selectedType == type) {
-                        withAnimation(.easeInOut(duration: 0.2)) {
-                            selectedType = type
+                    if type == .event && selectedType == .event {
+                        // Event chip: bullet + inline compact DatePicker
+                        HStack(spacing: BlopSpacing.xs) {
+                            Text("○")
+                                .font(BlopFont.signifier)
+                                .foregroundStyle(BlopColor.background)
+                            DatePicker("", selection: $eventDate, displayedComponents: .date)
+                                .labelsHidden()
+                                .datePickerStyle(.compact)
+                                .tint(BlopColor.background)
+                        }
+                        .padding(.horizontal, BlopSpacing.sm)
+                        .padding(.vertical, BlopSpacing.xs)
+                        .background(BlopColor.accent)
+                        .clipShape(Capsule())
+                        .padding(.leading, BlopSpacing.xs)
+                    } else {
+                        TypeChip(type: type, isSelected: selectedType == type) {
+                            withAnimation(.easeInOut(duration: 0.2)) {
+                                selectedType = type
+                            }
                         }
                     }
                 }
                 Spacer()
-                Toggle(isOn: $isPriority) {
-                    Image(systemName: isPriority ? "star.fill" : "star")
-                        .font(.body)
-                        .foregroundStyle(isPriority ? BlopColor.warning : BlopColor.faint)
+                Button {
+                    withAnimation(.easeInOut(duration: 0.15)) {
+                        signifier = nextSignifier(after: signifier)
+                    }
+                } label: {
+                    Text(signifier?.character ?? "○")
+                        .font(BlopFont.mono(16, weight: .medium))
+                        .foregroundStyle(signifier != nil ? signifierColor : BlopColor.ink.opacity(0.3))
+                        .frame(width: 36, height: 36)
+                        .contentShape(Rectangle())
                 }
-                .toggleStyle(.button)
-                .tint(BlopColor.warning)
-                .padding(.trailing, BlopSpacing.md)
+                .buttonStyle(.plain)
+                .padding(.trailing, BlopSpacing.sm)
             }
             .padding(.bottom, BlopSpacing.sm)
             .background(BlopColor.background)
@@ -77,13 +83,31 @@ struct RapidEntryBar: View {
         .animation(.easeInOut(duration: 0.2), value: selectedType)
     }
 
+    private var signifierColor: Color {
+        switch signifier {
+        case .priority:    return BlopColor.warning
+        case .inspiration: return BlopColor.accent
+        case .explore:     return BlopColor.ink
+        case nil:          return BlopColor.faint
+        }
+    }
+
+    private func nextSignifier(after current: EntrySignifier?) -> EntrySignifier? {
+        switch current {
+        case nil:          return .priority
+        case .priority:    return .inspiration
+        case .inspiration: return .explore
+        case .explore:     return nil
+        }
+    }
+
     private func submitIfNeeded() {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         let date = selectedType == .event ? eventDate : nil
-        onSubmit(trimmed, selectedType, isPriority, date)
+        onSubmit(trimmed, selectedType, signifier, date)
         text = ""
-        isPriority = false
+        signifier = nil
     }
 }
 

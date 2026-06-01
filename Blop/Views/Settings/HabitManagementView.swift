@@ -159,11 +159,11 @@ struct HabitEditSheet: View {
                                 Button { symbol = sym } label: {
                                     Image(systemName: sym)
                                         .font(.system(size: 20))
-                                        .foregroundStyle(symbol == sym ? BlopColor.accent : BlopColor.faint)
+                                        .foregroundStyle(symbol == sym ? BlopColor.accent : BlopColor.ink.opacity(0.4))
                                         .frame(width: 40, height: 40)
                                         .background(
                                             RoundedRectangle(cornerRadius: 8)
-                                                .fill(symbol == sym ? BlopColor.accent.opacity(0.15) : Color.clear)
+                                                .fill(symbol == sym ? BlopColor.accent.opacity(0.15) : BlopColor.faint)
                                         )
                                 }
                                 .buttonStyle(.plain)

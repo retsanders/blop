@@ -14,7 +14,10 @@ xcodegen generate
 xcodebuild build -scheme Blop -destination 'platform=iOS Simulator,name=iPhone 17'
 
 # Test
-xcodebuild test  -scheme Blop -destination 'platform=iOS Simulator,name=iPhone 17'
+xcodebuild test -scheme Blop -destination 'platform=iOS Simulator,name=iPhone 17'
+
+# Install and launch on booted simulator
+xcrun simctl install booted Blop.app && xcrun simctl launch booted com.robsanders.blop
 ```
 
 The `.claude/settings.json` hook runs `xcodebuild test` automatically after every Edit/Write tool call.
@@ -39,13 +42,14 @@ The `.claude/settings.json` hook runs `xcodebuild test` automatically after ever
 
 ```
 Blop/
-  BlopApp.swift                      # App entry point, ModelContainer setup
-  ContentView.swift                  # Root TabView (Daily / Monthly / Review / Settings)
+  BlopApp.swift                      # App entry, ModelContainer, one-time signifier migration
+  ContentView.swift                  # Root TabView — Today | Month | Future | Search | Settings
 
   Models/
-    BulletEntry.swift                # Core entry model (task/event/note)
+    BulletEntry.swift                # Core entry model (task/event/note) + EntrySignifier enum
     DailyLog.swift                   # One log per calendar day
     MonthlyLog.swift                 # One log per calendar month
+    Collection.swift                 # User-defined list (free-form collection)
     HabitDefinition.swift            # Habit template (name, symbol, colorHex, sortOrder)
     HabitCompletion.swift            # Daily habit check-in record
 
@@ -56,19 +60,25 @@ Blop/
 
   Views/
     Daily/
-      DailyLogView.swift             # Main daily log screen
-      EntryRowView.swift             # Single entry row with swipe/context actions
-      RapidEntryBar.swift            # Bottom entry bar (text field + type chips + priority)
+      DailyLogView.swift             # Main daily log screen (tab 0)
+      EntryRowView.swift             # Single entry row: swipe / context menu / expand panel
+      RapidEntryBar.swift            # Bottom entry bar: text + type chips + signifier cycle
       HabitTrackerView.swift         # Horizontal habit chip row
       CarryForwardSection.swift      # Yesterday's open tasks banner
     Monthly/
-      MonthlyLogView.swift           # Monthly log with task/event sections + jump buttons
+      MonthlyLogView.swift           # Monthly log — tasks + events sections, jump buttons
       MonthlyCarryForward.swift      # Unresolved tasks from prior months
       MonthlyDayStrip.swift          # Mini calendar strip showing active days
+    FutureLog/
+      FutureLogView.swift            # Next 6 months as collapsible sections (tab 2)
+    Search/
+      SearchView.swift               # Full-text search across all entries (tab 3)
     Review/
-      MonthlyReviewView.swift        # Stats: completion rate, streaks, migration counts
+      MonthlyReviewView.swift        # Stats sheet (opened from MonthlyLogView chart button)
+    Collections/
+      CollectionsView.swift          # CollectionsManagementView + CollectionDetailView
     Settings/
-      SettingsView.swift             # Theme, migration threshold, habits, export, git
+      SettingsView.swift             # Appearance, habits, collections, migration, export, git
       HabitManagementView.swift      # Habit CRUD (add/edit/reorder/delete)
     Shared/
       DesignSystem.swift             # BlopColor, BlopFont, BlopSpacing, DotGridBackground
@@ -96,15 +106,19 @@ BlopTests/
 ### Relationships
 ```
 DailyLog  (date: Date)
-  └── entries: [BulletEntry]          (tasks and notes only)
+  ├── entries: [BulletEntry]           (tasks and notes only — never events)
   └── habitCompletions: [HabitCompletion]
 
 MonthlyLog  (year: Int, month: Int)
-  └── entries: [BulletEntry]          (ALL events + migrated tasks)
+  └── entries: [BulletEntry]           (ALL events + monthly/migrated tasks)
+
+Collection  (title, symbol, sortOrder)
+  └── entries: [BulletEntry]           (tasks and notes only — no events)
 
 BulletEntry
-  ├── dailyLog: DailyLog?             (set for tasks/notes)
-  └── monthlyLog: MonthlyLog?         (set for ALL events)
+  ├── dailyLog: DailyLog?              (set for daily tasks/notes)
+  ├── monthlyLog: MonthlyLog?          (set for ALL events, and monthly tasks)
+  └── collection: Collection?          (set for collection entries)
 
 HabitDefinition  (name, symbol, colorHex, sortOrder, isActive)
 HabitCompletion  (completed: Bool, date: Date)
@@ -112,16 +126,18 @@ HabitCompletion  (completed: Bool, date: Date)
   └── dailyLog: DailyLog?
 ```
 
-### Critical architecture decision — events always go to MonthlyLog
-All events (regardless of their scheduled date) are stored in `MonthlyLog.entries`, not `DailyLog.entries`. They are keyed by `scheduledDate`. The daily view fetches events from the monthly log whose `scheduledDate` falls on the selected day and merges them with the daily log entries for display.
+### Critical: events always go to MonthlyLog
+All events are stored in `MonthlyLog.entries` keyed by `scheduledDate`, never in `DailyLog`. The daily view fetches events from the monthly log whose `scheduledDate` falls on the selected day and merges them.
 
-This means:
-- `MonthlyLog.sortedEvents` filters `entries` by `type == .event` and `scheduledDate` in the month
-- `MonthlyLog.sortedTasks` filters `entries` by `type == .task || .note`
-- `DailyLog.sortedEntries` never contains events
-- `DailyLogView.allDisplayEntries` = daily entries + monthly events for that day
+- `MonthlyLog.sortedEvents` — filters by `type == .event` and `scheduledDate` in the month
+- `MonthlyLog.sortedTasks` — filters by `type == .task || .note`
+- `DailyLog.sortedEntries` — never contains events
+- `DailyLogView.allDisplayEntries` — daily entries + monthly events for that day
 
-### EntryType / EntryStatus enums
+### Critical: collections never contain events
+`CollectionDetailView` blocks the `.event` type in its `addEntry` — collections are task/note lists only.
+
+### EntryType / EntryStatus / EntrySignifier
 
 ```swift
 enum EntryType: String, Codable { case task, event, note }
@@ -129,11 +145,21 @@ enum EntryType: String, Codable { case task, event, note }
 enum EntryStatus: String, Codable {
     case open, complete, migrated, scheduled, cancelled
 }
+
+enum EntrySignifier: String, Codable {
+    case priority    // ★  warning color
+    case inspiration // !  accent color
+    case explore     // ✦  ink color
+}
 ```
 
-Signifiers: `task→•`, `event→○`, `note→–`, `complete→✕`, `migrated→>`, `scheduled→<`, `cancelled→` (original signifier, faded)
+Bullet characters: `task→•`, `event→○`, `note→–`, `complete→✕`, `migrated→>`, `scheduled→<`
 
-Events are **not completable** — the complete/reopen actions are removed from events everywhere (action panel, context menu, leading swipe).
+**Signifier vs isPriority:** `BulletEntry` keeps `var isPriority: Bool` in the schema for backward compatibility, but all UI reads and writes `var signifier: EntrySignifier?` instead. A one-time migration in `BlopApp.swift` (guarded by `@AppStorage("signifierMigrated")`) converts old `isPriority=true` rows to `signifier=.priority` on first launch. Do not use `isPriority` in new UI code.
+
+**Renamed method:** `BulletEntry.bulletCharacter(atThreshold:)` returns the status character string (renamed from the old `signifier(atThreshold:)` to avoid collision with the `signifier` property).
+
+Events are **not completable** — complete/reopen is removed from events everywhere.
 
 ---
 
@@ -151,15 +177,18 @@ BlopColor.surface      // slightly elevated surface (habit tracker bg, list rows
 BlopColor.warning      // #C87941 (same in light and dark)
 ```
 
-All `BlopColor` properties are adaptive (`UIColor(dynamicProvider:)`) — they switch automatically between light and dark mode. Do not use `Color(hex:)` directly in views.
+All `BlopColor` properties are adaptive (`UIColor(dynamicProvider:)`) — they respond to system light/dark automatically. Do not use `Color(hex:)` directly in views. Exception: habit cells use `Color(hex: habit.colorHex)` for per-habit coloring.
 
-Habit cells use `Color(hex: habit.colorHex)` for per-habit coloring (vibrant palette, not the global accent).
+### Signifier content colors
+- `.priority` → `BlopColor.warning`
+- `.inspiration` → `BlopColor.accent`
+- `.explore` → `BlopColor.ink`
+- `nil` → `BlopColor.ink`
 
 ### Typography
 ```swift
 BlopFont.body(size)        // serif
 BlopFont.mono(size)        // monospaced (section headers, dates, signifiers)
-BlopFont.serif(size)       // explicit serif
 BlopFont.signifier         // mono 16 medium (bullet characters)
 BlopFont.dateHeader        // serif 22 semibold
 BlopFont.sectionHeader     // mono 11 medium
@@ -172,33 +201,51 @@ BlopFont.sectionHeader     // mono 11 medium
 
 ## Key Patterns
 
-### Tab Re-selection (navigate to today / current month)
-`TabReselectionCoordinator` (an invisible `UIViewRepresentable`) is placed in `DailyLogView`'s background. It walks the responder chain to find the `UITabBarController` and installs a delegate that fires when an already-selected tab is tapped again. It posts `Notification.Name.goToToday` or `.goToCurrentMonth`.
+### Tab bar (5 tabs)
+```
+Index 0 — Today    → DailyLogView        (calendar.day.timeline.left)
+Index 1 — Month    → MonthlyLogView      (calendar)
+Index 2 — Future   → FutureLogView       (calendar.badge.clock)
+Index 3 — Search   → SearchView          (magnifyingglass)
+Index 4 — Settings → SettingsView        (gear)
+```
+Review is no longer a tab — it opens as a sheet from the chart icon button in `MonthlyLogView`'s header.
 
-Views listen with `.onReceive(NotificationCenter.default.publisher(for: .goToToday))`.
+### Tab re-selection
+`TabReselectionCoordinator` (invisible `UIViewRepresentable` in `DailyLogView`'s `.background`) walks the responder chain to find `UITabBarController` and installs a delegate. On re-tap it posts:
+- Index 0 → `Notification.Name.goToToday`
+- Index 1 → `Notification.Name.goToCurrentMonth`
+- Index 2 → `Notification.Name.goToFutureLog`
+
+Views subscribe with `.onReceive(NotificationCenter.default.publisher(for: .goToToday))`.
+
+### Entry action surfaces
+`EntryRowView` exposes actions via:
+1. Leading swipe — complete/reopen (tasks only, not events)
+2. Trailing swipe — cancel entry
+3. Long-press context menu — signifier picker + complete + schedule + cancel
+4. Tap chevron → expandable inline action panel (`expandedEntryID: Binding<UUID?>`)
+
+`EntryRowView` signature uses `onSetSignifier: (EntrySignifier?) -> Void` (not `onTogglePriority`).
+
+### RapidEntryBar signifier
+The entry bar has a cycle button (not a toggle) that rotates: `nil → ★ → ! → ✦ → nil`. Its binding is `signifier: Binding<EntrySignifier?>`. The `onSubmit` closure signature is `(String, EntryType, EntrySignifier?, Date?)`.
 
 ### SwiftData queries
 `#Predicate` macros can't use enum member access inline — fetch all entries and filter in Swift instead.
 
-### Entry action surfaces
-`EntryRowView` exposes actions via:
-1. Leading swipe — complete/reopen (tasks only)
-2. Trailing swipe — delete
-3. Long-press context menu
-4. Tap → expandable inline action panel (`expandedEntryID: Binding<UUID?>`)
-
 ### Type selector reset
-Both `DailyLogView` and `MonthlyLogView` reset `newEntryType = .task` in `.onDisappear`.
+`DailyLogView`, `MonthlyLogView`, `FutureLogView`, and `CollectionDetailView` all reset `newEntryType = .task` in `.onDisappear`.
 
 ---
 
 ## Testing
 
-Tests use an in-memory `ModelContainer`:
+All test containers must include `Collection.self`:
 ```swift
 let container = try ModelContainer(
     for: BulletEntry.self, DailyLog.self, MonthlyLog.self,
-    HabitDefinition.self, HabitCompletion.self,
+        HabitDefinition.self, HabitCompletion.self, Collection.self,
     configurations: ModelConfiguration(isStoredInMemoryOnly: true)
 )
 ```
@@ -208,7 +255,11 @@ let container = try ModelContainer(
 ## What to Avoid
 
 - Do not store events in `DailyLog.entries` — they must go to `MonthlyLog.entries` with a `scheduledDate`.
+- Do not store events in `Collection.entries` — collections are task/note lists only.
 - Do not add complete/reopen actions to events anywhere.
+- Do not use `entry.isPriority` in UI — use `entry.signifier == .priority` instead.
+- Do not call `entry.signifier(atThreshold:)` — that method was renamed to `bulletCharacter(atThreshold:)`.
 - Do not hardcode color hex values in views — use `BlopColor.*`.
 - Do not use `Process` on iOS — `GitService` is wrapped in `#if os(macOS)`.
 - Do not commit the generated `Blop.xcodeproj/` — it is in `.gitignore` and regenerated by xcodegen.
+- Do not add a 6th tab — the tab bar is at the 5-tab iOS limit.

@@ -9,7 +9,7 @@ struct DailyLogViewModelTests {
     private func makeContainer() throws -> ModelContainer {
         try ModelContainer(
             for: BulletEntry.self, DailyLog.self, MonthlyLog.self,
-                HabitDefinition.self, HabitCompletion.self,
+                HabitDefinition.self, HabitCompletion.self, Collection.self,
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)
         )
     }
@@ -45,10 +45,10 @@ struct DailyLogViewModelTests {
         let vm = DailyLogViewModel()
         let log = vm.fetchOrCreateLog(for: Date(), context: context)
 
-        vm.addEntry(content: "Buy milk", type: .task, priority: true, scheduledDate: nil, to: log, context: context)
+        vm.addEntry(content: "Buy milk", type: .task, signifier: .priority, scheduledDate: nil, to: log, context: context)
         #expect(log.entries.count == 1)
         #expect(log.entries.first?.content == "Buy milk")
-        #expect(log.entries.first?.isPriority == true)
+        #expect(log.entries.first?.signifier == .priority)
     }
 
     @Test("migrate copies entry to new log and marks original as migrated")

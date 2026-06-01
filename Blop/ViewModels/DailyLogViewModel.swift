@@ -50,10 +50,10 @@ final class DailyLogViewModel {
         return try? context.fetch(descriptor).first
     }
 
-    func addEntry(content: String, type: EntryType, priority: Bool = false, scheduledDate: Date? = nil, to log: DailyLog, context: ModelContext) {
+    func addEntry(content: String, type: EntryType, signifier: EntrySignifier? = nil, scheduledDate: Date? = nil, to log: DailyLog, context: ModelContext) {
         let order = log.entries.count
         let entry = BulletEntry(content: content, type: type, sortOrder: order, scheduledDate: scheduledDate)
-        entry.isPriority = priority
+        entry.signifier = signifier
         entry.dailyLog = log
         context.insert(entry)
     }

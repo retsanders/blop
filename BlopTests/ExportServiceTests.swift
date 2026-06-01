@@ -9,7 +9,7 @@ struct ExportServiceTests {
     private func makeContainer() throws -> ModelContainer {
         try ModelContainer(
             for: BulletEntry.self, DailyLog.self, MonthlyLog.self,
-                HabitDefinition.self, HabitCompletion.self,
+                HabitDefinition.self, HabitCompletion.self, Collection.self,
             configurations: ModelConfiguration(isStoredInMemoryOnly: true)
         )
     }
@@ -76,6 +76,56 @@ struct ExportServiceTests {
         let service = ExportService()
         let output = service.exportDailyLog(log)
         #expect(output.contains("• Important *"))
+    }
+
+    @Test("exportDailyLog renders cancelled entry with dash")
+    func dailyLogCancelledEntry() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+
+        let log = DailyLog(date: Date())
+        context.insert(log)
+        let entry = BulletEntry(content: "Dropped task", type: .task)
+        entry.status = .cancelled
+        entry.dailyLog = log
+        context.insert(entry)
+
+        let service = ExportService()
+        let output = service.exportDailyLog(log)
+        #expect(output.contains("– Dropped task"))
+    }
+
+    @Test("exportDailyLog renders note entry with dash")
+    func dailyLogNoteEntry() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+
+        let log = DailyLog(date: Date())
+        context.insert(log)
+        let entry = BulletEntry(content: "Interesting observation", type: .note)
+        entry.dailyLog = log
+        context.insert(entry)
+
+        let service = ExportService()
+        let output = service.exportDailyLog(log)
+        #expect(output.contains("– Interesting observation"))
+    }
+
+    @Test("exportDailyLog renders scheduled entry with left-arrow sigil")
+    func dailyLogScheduledEntry() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+
+        let log = DailyLog(date: Date())
+        context.insert(log)
+        let entry = BulletEntry(content: "Deferred to monthly", type: .task)
+        entry.status = .scheduled
+        entry.dailyLog = log
+        context.insert(entry)
+
+        let service = ExportService()
+        let output = service.exportDailyLog(log)
+        #expect(output.contains("< Deferred to monthly"))
     }
 
     @Test("exportMonthlyLog renders tasks and events sections")
