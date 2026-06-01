@@ -1,4 +1,14 @@
 import SwiftUI
+import SwiftData
+
+// MARK: - Schedule Destination
+
+enum ScheduleDestination {
+    case month(Date)
+    case collection(Collection)
+}
+
+// MARK: - Entry Row
 
 struct EntryRowView: View {
     let entry: BulletEntry
@@ -7,7 +17,7 @@ struct EntryRowView: View {
     let onCancel: () -> Void
     let onRestore: () -> Void
     let onSetSignifier: (EntrySignifier?) -> Void
-    let onSchedule: (Date) -> Void
+    let onSchedule: (ScheduleDestination) -> Void
     let onDelete: () -> Void
 
     @Binding var expandedEntryID: UUID?
@@ -16,7 +26,6 @@ struct EntryRowView: View {
     @State private var editText = ""
     @State private var celebrating = false
     @State private var showSchedulePicker = false
-    @State private var toastLabel: String? = nil
     @FocusState private var isEditFocused: Bool
 
     private var isExpanded: Bool { expandedEntryID == entry.id }
@@ -28,7 +37,7 @@ struct EntryRowView: View {
         onCancel: @escaping () -> Void,
         onRestore: @escaping () -> Void = {},
         onSetSignifier: @escaping (EntrySignifier?) -> Void,
-        onSchedule: @escaping (Date) -> Void = { _ in },
+        onSchedule: @escaping (ScheduleDestination) -> Void = { _ in },
         onDelete: @escaping () -> Void,
         expandedEntryID: Binding<UUID?>
     ) {
@@ -44,7 +53,7 @@ struct EntryRowView: View {
     }
 
     private var contentColor: Color {
-        if entry.status == .cancelled { return BlopColor.ink.opacity(0.45) }
+        if entry.status == .cancelled { return BlopColor.ink.opacity(0.40) }
         switch entry.signifier {
         case .priority:    return BlopColor.warning
         case .inspiration: return BlopColor.accent
@@ -70,8 +79,8 @@ struct EntryRowView: View {
             if !expanded { isEditing = false; isEditFocused = false }
         }
         .sheet(isPresented: $showSchedulePicker) {
-            MonthPickerSheet { date in
-                onSchedule(date)
+            DestinationPickerSheet { destination in
+                onSchedule(destination)
                 showSchedulePicker = false
                 collapse()
             }
@@ -119,7 +128,7 @@ struct EntryRowView: View {
                 Text(entry.content)
                     .font(BlopFont.body())
                     .foregroundStyle(contentColor)
-                    .strikethrough(entry.status == .cancelled, color: BlopColor.ink.opacity(0.3))
+                    .strikethrough(entry.status == .cancelled, color: BlopColor.ink.opacity(0.4))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.leading, BlopSpacing.sm)
             }
@@ -131,7 +140,7 @@ struct EntryRowView: View {
             } label: {
                 Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                     .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(isExpanded ? BlopColor.accent : BlopColor.ink.opacity(0.35))
+                    .foregroundStyle(isExpanded ? BlopColor.accent : BlopColor.ink.opacity(0.4))
                     .frame(width: 28, height: 28)
                     .contentShape(Rectangle())
             }
@@ -140,20 +149,6 @@ struct EntryRowView: View {
         .padding(.vertical, BlopSpacing.xs)
         .scaleEffect(celebrating ? 1.04 : 1.0)
         .animation(.spring(response: 0.2, dampingFraction: 0.5), value: celebrating)
-        .overlay(alignment: .top) {
-            if let label = toastLabel {
-                Text(label)
-                    .font(BlopFont.mono(11))
-                    .foregroundStyle(BlopColor.background)
-                    .padding(.horizontal, BlopSpacing.sm)
-                    .padding(.vertical, BlopSpacing.xs)
-                    .background(BlopColor.ink.opacity(0.75))
-                    .clipShape(Capsule())
-                    .transition(.opacity.combined(with: .scale(scale: 0.9)))
-                    .allowsHitTesting(false)
-            }
-        }
-        .animation(.easeInOut(duration: 0.2), value: toastLabel)
     }
 
     private func collapse() {
@@ -186,66 +181,59 @@ struct EntryRowView: View {
         isEditFocused = false
     }
 
-    private func showToast(_ label: String) {
-        toastLabel = label
-        Task {
-            try? await Task.sleep(for: .milliseconds(1500))
-            toastLabel = nil
-        }
+    private func postSignifierToast(_ label: String) {
+        NotificationCenter.default.post(name: .signifierToast, object: label)
     }
 
     // MARK: - Action Panel
 
     private var actionPanel: some View {
-        mainActionRow
-            .frame(maxWidth: .infinity)
-            .background(BlopColor.surface)
-    }
-
-    private var mainActionRow: some View {
         HStack(alignment: .center, spacing: 0) {
             ForEach(Array(panelActions.enumerated()), id: \.offset) { index, item in
                 Button {
                     item.action()
                     if item.collapseAfter { collapse() }
                 } label: {
-                    VStack(spacing: 4) {
-                        Image(systemName: item.icon)
-                            .font(.system(size: 16))
+                    VStack(spacing: 2) {
+                        Text(item.symbol)
+                            .font(BlopFont.signifier)
+                            .strikethrough(item.strikethrough, color: item.color)
                         Text(item.label)
                             .font(BlopFont.mono(9))
                     }
                     .foregroundStyle(item.color)
-                    .frame(maxWidth: .infinity, minHeight: 52)
+                    .frame(maxWidth: .infinity, minHeight: 44)
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
 
                 if index < panelActions.count - 1 {
                     Divider()
-                        .frame(height: 28)
+                        .frame(height: 24)
                         .background(BlopColor.faint)
                 }
             }
         }
         .frame(maxWidth: .infinity)
+        .background(BlopColor.surface)
     }
 
     private var panelActions: [PanelAction] {
         var items: [PanelAction] = []
 
         if entry.type == .task && entry.status != .cancelled {
+            let isComplete = entry.status == .complete
             items.append(PanelAction(
-                label: entry.status == .complete ? "Reopen" : "Complete",
-                icon: "checkmark.circle",
+                symbol: isComplete ? "↩" : "✕",
+                label: isComplete ? "Reopen" : "Complete",
                 action: triggerComplete
             ))
         }
 
         if entry.type == .task && entry.status == .open {
             items.append(PanelAction(
+                symbol: "<",
                 label: "Schedule",
-                icon: "calendar",
                 collapseAfter: false,
                 action: { showSchedulePicker = true }
             ))
@@ -253,43 +241,48 @@ struct EntryRowView: View {
 
         if entry.type != .event && entry.status != .cancelled {
             let next = nextSignifier(after: entry.signifier)
+            let sigSymbol = entry.signifier?.character ?? "◌"
             let sigLabel = entry.signifier?.label ?? "Signifier"
-            let sigIcon  = entry.signifier?.icon  ?? "star"
             items.append(PanelAction(
+                symbol: sigSymbol,
                 label: sigLabel,
-                icon: sigIcon,
                 collapseAfter: false,
                 action: {
                     onSetSignifier(next)
-                    showToast(next?.label ?? "No Signifier")
+                    postSignifierToast(next?.label ?? "No Signifier")
                 }
             ))
         }
 
         if entry.type != .event && entry.status != .cancelled {
             items.append(PanelAction(
+                symbol: isEditing ? "✓" : "✎",
                 label: isEditing ? "Done" : "Edit",
-                icon: isEditing ? "checkmark" : "pencil",
                 collapseAfter: isEditing,
                 action: { if isEditing { saveEdit() } else { startEditing() } }
             ))
         }
 
-        // Type cycle
         if entry.status != .cancelled {
             let nextType = nextEntryType(after: entry.type)
             items.append(PanelAction(
+                symbol: entry.type.signifier,
                 label: entry.type.label,
-                icon: entry.type.icon,
                 collapseAfter: false,
                 action: { entry.type = nextType }
             ))
         }
 
         if entry.status == .cancelled {
-            items.append(PanelAction(label: "Restore", icon: "arrow.uturn.backward", action: onRestore))
+            items.append(PanelAction(symbol: "↩", label: "Restore", action: onRestore))
         } else {
-            items.append(PanelAction(label: "Cancel", icon: "xmark.circle", color: BlopColor.warning, action: onCancel))
+            items.append(PanelAction(
+                symbol: "A",
+                label: "Cancel",
+                color: BlopColor.warning,
+                strikethrough: true,
+                action: onCancel
+            ))
         }
 
         return items
@@ -309,7 +302,7 @@ struct EntryRowView: View {
                 }
                 if entry.status == .open {
                     Button { showSchedulePicker = true } label: {
-                        Label("Schedule to Month", systemImage: "calendar")
+                        Label("Schedule", systemImage: "calendar")
                     }
                 }
                 Button { onSetSignifier(nil) } label: {
@@ -363,19 +356,21 @@ struct EntryRowView: View {
     }
 }
 
-// MARK: - Month Picker Sheet
+// MARK: - Destination Picker Sheet
 
-private struct MonthPickerSheet: View {
-    let onPick: (Date) -> Void
+private struct DestinationPickerSheet: View {
+    let onPick: (ScheduleDestination) -> Void
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.modelContext) private var context
+    @Query(sort: \Collection.sortOrder) private var collections: [Collection]
 
     private var months: [(date: Date, label: String)] {
         let cal = Calendar.current
         let now = Date()
+        let start = cal.date(from: cal.dateComponents([.year, .month], from: now)) ?? now
         return (0..<12).compactMap { offset in
-            guard let date = cal.date(byAdding: .month, value: offset, to: cal.startOfMonth(for: now)) else { return nil }
-            let label = date.formatted(.dateTime.month(.wide).year())
-            return (date: date, label: label)
+            guard let date = cal.date(byAdding: .month, value: offset, to: start) else { return nil }
+            return (date: date, label: date.formatted(.dateTime.month(.wide).year()))
         }
     }
 
@@ -383,15 +378,43 @@ private struct MonthPickerSheet: View {
         NavigationStack {
             ZStack {
                 BlopColor.background.ignoresSafeArea()
-                List(months, id: \.date) { item in
-                    Button {
-                        onPick(item.date)
-                    } label: {
-                        Text(item.label)
-                            .font(BlopFont.body(16))
-                            .foregroundStyle(BlopColor.ink)
+                List {
+                    if !collections.isEmpty {
+                        Section {
+                            ForEach(collections) { coll in
+                                Button {
+                                    onPick(.collection(coll))
+                                } label: {
+                                    HStack(spacing: BlopSpacing.md) {
+                                        Image(systemName: coll.symbol)
+                                            .foregroundStyle(BlopColor.accent)
+                                            .frame(width: 20)
+                                        Text(coll.title)
+                                            .font(BlopFont.body(16))
+                                            .foregroundStyle(BlopColor.ink)
+                                    }
+                                }
+                                .listRowBackground(BlopColor.surface)
+                            }
+                        } header: {
+                            Text("COLLECTIONS").font(BlopFont.sectionHeader)
+                        }
                     }
-                    .listRowBackground(BlopColor.surface)
+
+                    Section {
+                        ForEach(months, id: \.date) { item in
+                            Button {
+                                onPick(.month(item.date))
+                            } label: {
+                                Text(item.label)
+                                    .font(BlopFont.body(16))
+                                    .foregroundStyle(BlopColor.ink)
+                            }
+                            .listRowBackground(BlopColor.surface)
+                        }
+                    } header: {
+                        Text("MONTHS").font(BlopFont.sectionHeader)
+                    }
                 }
                 .scrollContentBackground(.hidden)
             }
@@ -407,19 +430,13 @@ private struct MonthPickerSheet: View {
     }
 }
 
-private extension Calendar {
-    func startOfMonth(for date: Date) -> Date {
-        let comps = dateComponents([.year, .month], from: date)
-        return self.date(from: comps) ?? date
-    }
-}
-
 // MARK: - Panel Action Model
 
 private struct PanelAction {
+    let symbol: String
     let label: String
-    let icon: String
     var color: Color = BlopColor.ink
+    var strikethrough: Bool = false
     var collapseAfter: Bool = true
     let action: () -> Void
 }
@@ -434,7 +451,6 @@ private struct LeftAnnotation: View {
     private var hasMigrationCount: Bool { entry.migrationCount > 0 }
     private var showAlternating: Bool { entry.signifier != nil && hasMigrationCount }
 
-    private var signifierChar: String { entry.signifier?.character ?? "" }
     private var signifierColor: Color {
         switch entry.signifier {
         case .priority:    return BlopColor.warning
@@ -449,27 +465,20 @@ private struct LeftAnnotation: View {
             if showAlternating {
                 Group {
                     if showSignifier {
-                        Text(signifierChar)
-                            .font(BlopFont.mono(14, weight: .medium))
+                        signifierImage
                     } else {
-                        Text("\(entry.migrationCount)")
-                            .font(BlopFont.mono(14, weight: .medium))
+                        migrationText
                     }
                 }
-                .foregroundStyle(signifierColor)
             } else if entry.signifier != nil {
-                Text(signifierChar)
-                    .font(BlopFont.mono(14, weight: .medium))
-                    .foregroundStyle(signifierColor)
+                signifierImage
             } else if hasMigrationCount {
-                Text("\(entry.migrationCount)")
-                    .font(BlopFont.mono(10))
-                    .foregroundStyle(entry.migrationCount >= threshold ? BlopColor.warning : BlopColor.faint)
+                migrationText
             } else {
                 Color.clear
             }
         }
-        .frame(width: 20, alignment: .center)
+        .frame(width: 24, alignment: .center)
         .task(id: showAlternating) {
             guard showAlternating else { return }
             while !Task.isCancelled {
@@ -477,5 +486,20 @@ private struct LeftAnnotation: View {
                 withAnimation(.easeInOut(duration: 0.3)) { showSignifier.toggle() }
             }
         }
+    }
+
+    @ViewBuilder
+    private var signifierImage: some View {
+        if let sig = entry.signifier {
+            Image(systemName: sig.icon)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(signifierColor)
+        }
+    }
+
+    private var migrationText: some View {
+        Text("\(entry.migrationCount)")
+            .font(BlopFont.mono(10))
+            .foregroundStyle(entry.migrationCount >= threshold ? BlopColor.warning : BlopColor.faint)
     }
 }

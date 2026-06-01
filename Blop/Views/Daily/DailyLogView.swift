@@ -46,7 +46,7 @@ struct DailyLogView: View {
                                         let now = Date()
                                         let comps = cal.dateComponents([.year, .month], from: now)
                                         let firstOfMonth = cal.date(from: comps) ?? now
-                                        schedule(entry, scheduledFor: firstOfMonth)
+                                        scheduleEntry(entry, to: .month(firstOfMonth))
                                     },
                                     onDrop: { viewModel.drop($0) }
                                 )
@@ -72,7 +72,7 @@ struct DailyLogView: View {
                                     onCancel: { viewModel.cancel(entry) },
                                     onRestore: { entry.status = .open },
                                     onSetSignifier: { entry.signifier = $0 },
-                                    onSchedule: { date in schedule(entry, scheduledFor: date) },
+                                    onSchedule: { dest in scheduleEntry(entry, to: dest) },
                                     onDelete: { context.delete(entry) },
                                     expandedEntryID: $expandedEntryID
                                 )
@@ -210,12 +210,19 @@ struct DailyLogView: View {
         viewModel.migrate(entry, to: log, context: context)
     }
 
-    private func schedule(_ entry: BulletEntry, scheduledFor date: Date) {
-        let cal = Calendar.current
-        let year = cal.component(.year, from: date)
-        let month = cal.component(.month, from: date)
-        let vm = MonthlyLogViewModel()
-        let log = vm.fetchOrCreate(year: year, month: month, context: context)
-        viewModel.schedule(entry, monthlyLog: log, context: context)
+    private func scheduleEntry(_ entry: BulletEntry, to destination: ScheduleDestination) {
+        switch destination {
+        case .month(let date):
+            let cal = Calendar.current
+            let year = cal.component(.year, from: date)
+            let month = cal.component(.month, from: date)
+            let vm = MonthlyLogViewModel()
+            let log = vm.fetchOrCreate(year: year, month: month, context: context)
+            viewModel.schedule(entry, monthlyLog: log, context: context)
+        case .collection(let coll):
+            entry.dailyLog = nil
+            entry.collection = coll
+            entry.status = .scheduled
+        }
     }
 }

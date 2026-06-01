@@ -21,6 +21,14 @@ struct RapidEntryBar: View {
                     .focused($isFocused)
                     .submitLabel(.done)
                     .onSubmit(submitIfNeeded)
+                    .toolbar {
+                        ToolbarItemGroup(placement: .keyboard) {
+                            Spacer()
+                            Button("Done") { isFocused = false }
+                                .font(BlopFont.mono(14))
+                                .foregroundStyle(BlopColor.accent)
+                        }
+                    }
 
                 if !text.isEmpty {
                     Button(action: submitIfNeeded) {
@@ -37,29 +45,19 @@ struct RapidEntryBar: View {
             // Type strip + signifier cycle button
             HStack(spacing: 0) {
                 ForEach([EntryType.task, .note, .event], id: \.self) { type in
-                    if type == .event && selectedType == .event {
-                        // Event chip: bullet + inline compact DatePicker
-                        HStack(spacing: BlopSpacing.xs) {
-                            Text("○")
-                                .font(BlopFont.signifier)
-                                .foregroundStyle(BlopColor.background)
-                            DatePicker("", selection: $eventDate, displayedComponents: .date)
-                                .labelsHidden()
-                                .datePickerStyle(.compact)
-                                .tint(BlopColor.background)
-                        }
-                        .padding(.horizontal, BlopSpacing.sm)
-                        .padding(.vertical, BlopSpacing.xs)
-                        .background(BlopColor.accent)
-                        .clipShape(Capsule())
-                        .padding(.leading, BlopSpacing.xs)
-                    } else {
-                        TypeChip(type: type, isSelected: selectedType == type) {
-                            withAnimation(.easeInOut(duration: 0.2)) {
-                                selectedType = type
-                            }
+                    TypeChip(type: type, isSelected: selectedType == type) {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            selectedType = type
                         }
                     }
+                }
+                if selectedType == .event {
+                    DatePicker("", selection: $eventDate, displayedComponents: .date)
+                        .labelsHidden()
+                        .datePickerStyle(.compact)
+                        .tint(BlopColor.accent)
+                        .transition(.opacity)
+                        .padding(.leading, BlopSpacing.xs)
                 }
                 Spacer()
                 Button {
@@ -67,11 +65,16 @@ struct RapidEntryBar: View {
                         signifier = nextSignifier(after: signifier)
                     }
                 } label: {
-                    Text(signifier?.character ?? "○")
-                        .font(BlopFont.mono(16, weight: .medium))
-                        .foregroundStyle(signifier != nil ? signifierColor : BlopColor.ink.opacity(0.3))
-                        .frame(width: 36, height: 36)
-                        .contentShape(Rectangle())
+                    ZStack {
+                        Circle()
+                            .fill(signifier != nil ? BlopColor.accent.opacity(0.15) : BlopColor.faint)
+                            .frame(width: 32, height: 32)
+                        Image(systemName: signifier?.icon ?? "circle")
+                            .font(.system(size: 14))
+                            .foregroundStyle(signifier != nil ? signifierColor : BlopColor.ink.opacity(0.5))
+                    }
+                    .frame(width: 36, height: 36)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .padding(.trailing, BlopSpacing.sm)

@@ -5,6 +5,7 @@ extension Notification.Name {
     static let goToToday = Notification.Name("blop.goToToday")
     static let goToCurrentMonth = Notification.Name("blop.goToCurrentMonth")
     static let goToFutureLog = Notification.Name("blop.goToFutureLog")
+    static let signifierToast = Notification.Name("blop.signifierToast")
 }
 
 /// Invisible UIView that walks the responder chain to find the UITabBarController
