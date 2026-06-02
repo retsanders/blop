@@ -102,4 +102,165 @@ struct DailyLogViewModelTests {
         #expect(monthLog.entries.count == 1)
         #expect(monthLog.entries.first?.content == "Monthly task")
     }
+
+    // MARK: - toggleComplete
+
+    @Test("toggleComplete sets an open entry to complete")
+    func toggleCompleteOpenToComplete() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let vm = DailyLogViewModel()
+        let log = vm.fetchOrCreateLog(for: Date(), context: context)
+        vm.addEntry(content: "Toggle me", type: .task, to: log, context: context)
+        let entry = log.entries.first!
+
+        vm.toggleComplete(entry)
+        #expect(entry.status == .complete)
+    }
+
+    @Test("toggleComplete sets a complete entry back to open")
+    func toggleCompleteCompleteToOpen() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let vm = DailyLogViewModel()
+        let log = vm.fetchOrCreateLog(for: Date(), context: context)
+        vm.addEntry(content: "Toggle me", type: .task, to: log, context: context)
+        let entry = log.entries.first!
+        entry.status = .complete
+
+        vm.toggleComplete(entry)
+        #expect(entry.status == .open)
+    }
+
+    // MARK: - cancel
+
+    @Test("cancel sets entry status to cancelled")
+    func cancelEntry() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let vm = DailyLogViewModel()
+        let log = vm.fetchOrCreateLog(for: Date(), context: context)
+        vm.addEntry(content: "Cancel me", type: .task, to: log, context: context)
+        let entry = log.entries.first!
+
+        vm.cancel(entry)
+        #expect(entry.status == .cancelled)
+    }
+
+    // MARK: - fetchLog
+
+    @Test("fetchLog returns nil when no log exists for the given date")
+    func fetchLogReturnsNil() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let vm = DailyLogViewModel()
+        let date = Calendar.current.date(from: DateComponents(year: 2020, month: 1, day: 1))!
+
+        #expect(vm.fetchLog(for: date, context: context) == nil)
+    }
+
+    @Test("fetchLog returns the existing log for a date that has one")
+    func fetchLogReturnsExisting() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let vm = DailyLogViewModel()
+        let date = Calendar.current.date(from: DateComponents(year: 2026, month: 3, day: 15))!
+
+        let created = vm.fetchOrCreateLog(for: date, context: context)
+        let fetched = vm.fetchLog(for: date, context: context)
+        #expect(fetched?.id == created.id)
+    }
+
+    // MARK: - ensureHabitCompletions
+
+    @Test("ensureHabitCompletions adds completions for active habits not yet tracked")
+    func ensureHabitCompletionsAddsNew() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let vm = DailyLogViewModel()
+        let log = vm.fetchOrCreateLog(for: Date(), context: context)
+
+        let h1 = HabitDefinition(name: "Exercise")
+        let h2 = HabitDefinition(name: "Read")
+        context.insert(h1)
+        context.insert(h2)
+
+        vm.ensureHabitCompletions(for: log, habits: [h1, h2], context: context)
+        #expect(log.habitCompletions.count == 2)
+    }
+
+    @Test("ensureHabitCompletions is idempotent on repeated calls")
+    func ensureHabitCompletionsIdempotent() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let vm = DailyLogViewModel()
+        let log = vm.fetchOrCreateLog(for: Date(), context: context)
+
+        let habit = HabitDefinition(name: "Meditate")
+        context.insert(habit)
+
+        vm.ensureHabitCompletions(for: log, habits: [habit], context: context)
+        vm.ensureHabitCompletions(for: log, habits: [habit], context: context)
+        #expect(log.habitCompletions.count == 1)
+    }
+
+    @Test("ensureHabitCompletions skips inactive habits")
+    func ensureHabitCompletionsSkipsInactive() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let vm = DailyLogViewModel()
+        let log = vm.fetchOrCreateLog(for: Date(), context: context)
+
+        let active = HabitDefinition(name: "Active")
+        let inactive = HabitDefinition(name: "Inactive")
+        inactive.isActive = false
+        context.insert(active)
+        context.insert(inactive)
+
+        vm.ensureHabitCompletions(for: log, habits: [active, inactive], context: context)
+        #expect(log.habitCompletions.count == 1)
+        #expect(log.habitCompletions.first?.habit?.name == "Active")
+    }
+
+    // MARK: - Navigation
+
+    @Test("isToday returns true when selectedDate is today")
+    func isTodayTrue() {
+        let vm = DailyLogViewModel()
+        vm.selectedDate = Calendar.current.startOfDay(for: Date())
+        #expect(vm.isToday == true)
+    }
+
+    @Test("isToday returns false when selectedDate is not today")
+    func isTodayFalse() {
+        let vm = DailyLogViewModel()
+        vm.selectedDate = Calendar.current.date(from: DateComponents(year: 2020, month: 1, day: 1))!
+        #expect(vm.isToday == false)
+    }
+
+    @Test("goToPreviousDay decrements selectedDate by one day")
+    func goToPreviousDay() {
+        let vm = DailyLogViewModel()
+        vm.selectedDate = Calendar.current.date(from: DateComponents(year: 2026, month: 5, day: 15))!
+        vm.goToPreviousDay()
+        let expected = Calendar.current.date(from: DateComponents(year: 2026, month: 5, day: 14))!
+        #expect(vm.selectedDate == expected)
+    }
+
+    @Test("goToNextDay increments selectedDate by one day")
+    func goToNextDay() {
+        let vm = DailyLogViewModel()
+        vm.selectedDate = Calendar.current.date(from: DateComponents(year: 2026, month: 5, day: 15))!
+        vm.goToNextDay()
+        let expected = Calendar.current.date(from: DateComponents(year: 2026, month: 5, day: 16))!
+        #expect(vm.selectedDate == expected)
+    }
+
+    @Test("goToToday resets selectedDate to today regardless of previous value")
+    func goToToday() {
+        let vm = DailyLogViewModel()
+        vm.selectedDate = Calendar.current.date(from: DateComponents(year: 2020, month: 1, day: 1))!
+        vm.goToToday()
+        #expect(Calendar.current.isDateInToday(vm.selectedDate))
+    }
 }

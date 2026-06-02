@@ -111,4 +111,98 @@ struct ReviewViewModelTests {
         // streak from day 5 backward: day 5 done, day 4 not done → streak = 1
         #expect(stat.streak == 1)
     }
+
+    @Test("generate produces zero completionRate and nil mostProductiveDay for a month with no tasks")
+    func emptyMonthReview() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+
+        let log = DailyLog(date: date(year: 2026, month: 5, day: 1))
+        context.insert(log)
+
+        // Only a note — no tasks
+        let note = BulletEntry(content: "A note", type: .note)
+        note.dailyLog = log
+        context.insert(note)
+
+        let vm = ReviewViewModel()
+        vm.generate(year: 2026, month: 5, threshold: 3, context: context)
+
+        let review = try #require(vm.review)
+        #expect(review.totalTasks == 0)
+        #expect(review.completionRate == 0.0)
+        #expect(review.mostProductiveDay == nil)
+    }
+
+    @Test("mostProductiveDay is non-nil and a valid weekday name when completions exist")
+    func mostProductiveDayNonNil() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+
+        let log = DailyLog(date: date(year: 2026, month: 5, day: 1))
+        context.insert(log)
+
+        let entry = BulletEntry(content: "Done", type: .task)
+        entry.status = .complete
+        entry.dailyLog = log
+        context.insert(entry)
+
+        let vm = ReviewViewModel()
+        vm.generate(year: 2026, month: 5, threshold: 3, context: context)
+
+        let review = try #require(vm.review)
+        let day = try #require(review.mostProductiveDay)
+        #expect(Calendar.current.weekdaySymbols.contains(day))
+    }
+
+    @Test("generate produces correct habit completionRate")
+    func habitCompletionRate() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+
+        let habit = HabitDefinition(name: "Yoga")
+        context.insert(habit)
+
+        // 3 days; habit done on 2 of them
+        for (day, done) in [(1, true), (2, true), (3, false)] {
+            let log = DailyLog(date: date(year: 2026, month: 5, day: day))
+            context.insert(log)
+            let c = HabitCompletion(habit: habit, date: log.date, completed: done)
+            c.dailyLog = log
+            context.insert(c)
+        }
+
+        let vm = ReviewViewModel()
+        vm.generate(year: 2026, month: 5, threshold: 3, context: context)
+
+        let review = try #require(vm.review)
+        let stat = try #require(review.habitStats.first)
+        #expect(abs(stat.completionRate - (2.0 / 3.0)) < 0.001)
+    }
+
+    @Test("generate counts migratedTasks and cancelledTasks correctly")
+    func migratedAndCancelledCounts() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+
+        let log = DailyLog(date: date(year: 2026, month: 5, day: 1))
+        context.insert(log)
+
+        let migrated = BulletEntry(content: "Migrated", type: .task)
+        migrated.status = .migrated
+        migrated.dailyLog = log
+        context.insert(migrated)
+
+        let cancelled = BulletEntry(content: "Cancelled", type: .task)
+        cancelled.status = .cancelled
+        cancelled.dailyLog = log
+        context.insert(cancelled)
+
+        let vm = ReviewViewModel()
+        vm.generate(year: 2026, month: 5, threshold: 3, context: context)
+
+        let review = try #require(vm.review)
+        #expect(review.migratedTasks == 1)
+        #expect(review.cancelledTasks == 1)
+    }
 }
