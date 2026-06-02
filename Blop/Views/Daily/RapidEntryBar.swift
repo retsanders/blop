@@ -56,6 +56,7 @@ struct RapidEntryBar: View {
                         }
                     }
                 }
+                .padding(.leading, BlopSpacing.sm)
                 if selectedType == .event {
                     DatePicker("", selection: $eventDate, displayedComponents: .date)
                         .labelsHidden()

@@ -36,7 +36,7 @@ struct MonthlyLogView: View {
 
                 ScrollViewReader { proxy in
                     // Pinned: jump buttons + review
-                    HStack(spacing: BlopSpacing.sm) {
+                    HStack(alignment: .center, spacing: BlopSpacing.sm) {
                         JumpButton(signifier: "•", label: "Tasks") {
                             withAnimation { proxy.scrollTo("tasks", anchor: .top) }
                         }
@@ -46,8 +46,10 @@ struct MonthlyLogView: View {
                         Spacer()
                         JumpButton(icon: "chart.bar", label: "Review") { showReview = true }
                     }
+                    .frame(maxWidth: .infinity, minHeight: 30, alignment: .bottomLeading)
                     .padding(.horizontal, BlopSpacing.md)
-                    .padding(.vertical, BlopSpacing.sm)
+                    .padding(.leading, BlopSpacing.sm)
+                    .padding(.trailing, BlopSpacing.sm)
                     Divider().background(BlopColor.faint)
 
                     ScrollView {
