@@ -28,7 +28,9 @@ struct SearchView: View {
         }
         .onChange(of: query) { runSearch() }
         .sheet(item: $selectedCollection) { coll in
-            CollectionDetailView(collection: coll)
+            NavigationStack {
+                CollectionDetailView(collection: coll)
+            }
         }
     }
 

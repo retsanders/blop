@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @AppStorage("themePreference") private var themePreference: String = "system"
+    @AppStorage("dataWipedAfterCrash") private var dataWipedAfterCrash = false
     @SceneStorage("selectedTab") private var selectedTab: Int = 0
     @State private var toastMessage: String? = nil
 
@@ -48,9 +49,9 @@ struct ContentView: View {
                     .padding(.vertical, BlopSpacing.sm)
                     .background(BlopColor.ink.opacity(0.8))
                     .clipShape(Capsule())
-                    .padding(.bottom, 100)
+                    .padding(.bottom, 150)
                     .allowsHitTesting(false)
-                    .transition(.opacity.combined(with: .move(edge: .bottom)))
+                    .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
         .animation(.easeInOut(duration: 0.25), value: toastMessage)
@@ -60,6 +61,11 @@ struct ContentView: View {
                 try? await Task.sleep(for: .milliseconds(1500))
                 toastMessage = nil
             }
+        }
+        .alert("Data Reset", isPresented: $dataWipedAfterCrash) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text("A compatibility issue required Blop to clear its data. We're sorry for the inconvenience.")
         }
     }
 }

@@ -6,12 +6,13 @@ struct SettingsView: View {
     @AppStorage("migrationThreshold") private var threshold: Int = 3
     @State private var settings = AppSettings.shared
     @State private var showDirectoryPicker = false
-    @State private var showExportConfirm = false
+    @State private var showExportFolderPicker = false
     @State private var exportError: String?
     @State private var exportSuccess = false
-    @State private var isExporting = false
     @State private var isCommitting = false
     @State private var gitNotAvailable = false
+    @State private var showDeleteConfirmation1 = false
+    @State private var showDeleteConfirmation2 = false
 
     private let exportService = ExportService()
     private let gitService = GitService()
@@ -27,6 +28,7 @@ struct SettingsView: View {
                 migrationSection
                 exportSection
                 gitSection
+                dangerSection
             }
             .scrollContentBackground(.hidden)
         }
@@ -51,6 +53,31 @@ struct SettingsView: View {
             case .success(let url): settings.gitRepoURL = url
             case .failure(let err): exportError = err.localizedDescription
             }
+        }
+        .fileImporter(
+            isPresented: $showExportFolderPicker,
+            allowedContentTypes: [.folder]
+        ) { result in
+            if case .success(let url) = result {
+                do {
+                    try exportService.writeToDirectory(url, context: context)
+                    exportSuccess = true
+                } catch {
+                    exportError = error.localizedDescription
+                }
+            }
+        }
+        .alert("Clear All Data?", isPresented: $showDeleteConfirmation1) {
+            Button("Cancel", role: .cancel) {}
+            Button("Continue", role: .destructive) { showDeleteConfirmation2 = true }
+        } message: {
+            Text("This will permanently delete all your journal entries, habits, and collections.")
+        }
+        .alert("Are you absolutely sure?", isPresented: $showDeleteConfirmation2) {
+            Button("Cancel", role: .cancel) {}
+            Button("Delete Everything", role: .destructive) { clearAllData() }
+        } message: {
+            Text("This cannot be undone. Every entry, habit, and collection will be permanently erased.")
         }
     }
 
@@ -110,23 +137,31 @@ struct SettingsView: View {
 
     private var exportSection: some View {
         Section {
-            Button(action: exportToFiles) {
+            Button { showExportFolderPicker = true } label: {
                 HStack {
                     Text("Export All to Markdown")
                         .foregroundStyle(BlopColor.ink)
                     Spacer()
-                    if isExporting {
-                        ProgressView()
-                    } else {
-                        Image(systemName: "arrow.up.doc")
-                            .foregroundStyle(BlopColor.accent)
-                    }
+                    Image(systemName: "arrow.up.doc")
+                        .foregroundStyle(BlopColor.accent)
                 }
             }
-            .disabled(isExporting)
         } header: {
             Text("EXPORT")
                 .font(BlopFont.sectionHeader)
+        }
+    }
+
+    private var dangerSection: some View {
+        Section {
+            Button("Clear All Data", role: .destructive) {
+                showDeleteConfirmation1 = true
+            }
+            .font(BlopFont.mono(14))
+        } header: {
+            Text("DANGER ZONE")
+                .font(BlopFont.sectionHeader)
+                .foregroundStyle(BlopColor.warning)
         }
     }
 
@@ -180,18 +215,13 @@ struct SettingsView: View {
         }
     }
 
-    private func exportToFiles() {
-        isExporting = true
-        Task {
-            do {
-                let docs = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask).first!
-                try exportService.writeToDirectory(docs, context: context)
-                await MainActor.run { exportSuccess = true }
-            } catch {
-                await MainActor.run { exportError = error.localizedDescription }
-            }
-            await MainActor.run { isExporting = false }
-        }
+    private func clearAllData() {
+        try? context.delete(model: BulletEntry.self)
+        try? context.delete(model: DailyLog.self)
+        try? context.delete(model: MonthlyLog.self)
+        try? context.delete(model: HabitDefinition.self)
+        try? context.delete(model: HabitCompletion.self)
+        try? context.delete(model: Collection.self)
     }
 
     private func exportAndCommit() {

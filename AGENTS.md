@@ -223,7 +223,16 @@ Views subscribe with `.onReceive(NotificationCenter.default.publisher(for: .goTo
 `ContentView` uses `@SceneStorage("selectedTab")` (not `@State`) so the selected tab survives view identity changes caused by `@AppStorage` theme changes.
 
 ### Signifier toast
-`Notification.Name.signifierToast` (defined in `TabReselection.swift`) is posted by `RapidEntryBar` when the signifier cycle button is tapped. `ContentView` listens and shows a bottom-of-screen toast overlay. Do **not** post this from `EntryRowView` — the panel changes signifier silently.
+`Notification.Name.signifierToast` (defined in `TabReselection.swift`) is posted by `RapidEntryBar` when the signifier cycle button is tapped. `ContentView` listens and shows a **top-of-screen** toast overlay (`.overlay(alignment: .top)` with `.padding(.top, 60)`). Do **not** post this from `EntryRowView` — the panel changes signifier silently.
+
+### ModelContainer crash recovery
+`BlopApp.init()` attempts to create the `ModelContainer` inside a `do/catch`. On failure (schema mismatch or store corruption) it deletes the three store files (`default.store`, `.store-shm`, `.store-wal`) from `URL.applicationSupportDirectory`, sets `UserDefaults "dataWipedAfterCrash" = true`, then creates a fresh container. `ContentView` reads that flag via `@AppStorage("dataWipedAfterCrash")` and shows a one-time alert.
+
+### Export folder picker
+The "Export All to Markdown" button in `SettingsView` triggers a `.fileImporter(allowedContentTypes: [.folder])` every time (no remembered path). The selected URL is passed directly to `ExportService.writeToDirectory(_:context:)`, which already handles `startAccessingSecurityScopedResource` internally.
+
+### Clear All Data
+`SettingsView` has a DANGER ZONE section with a "Clear All Data" button that requires two sequential confirmation alerts before calling `clearAllData()`, which uses `ModelContext.delete(model:)` bulk-delete for all six model types.
 
 ### Schedule destination
 `ScheduleDestination` enum (in `EntryRowView.swift`) has two cases:
@@ -245,7 +254,7 @@ Views subscribe with `.onReceive(NotificationCenter.default.publisher(for: .goTo
 The entry bar has a cycle button (SF Symbol in a circular background) that rotates: `nil → priority → inspiration → explore → nil`. Its binding is `signifier: Binding<EntrySignifier?>`. Tapping posts `.signifierToast` via `NotificationCenter`. The `onSubmit` closure signature is `(String, EntryType, EntrySignifier?, Date?)`.
 
 ### SearchView idle state
-When the search query is fewer than 2 characters, `SearchView` shows a Collections list (all user-defined collections with entry counts). Tapping a collection opens `CollectionDetailView` in a sheet. Full-text search activates at 2+ characters.
+When the search query is fewer than 2 characters, `SearchView` shows a Collections list (all user-defined collections with entry counts). Tapping a collection opens `CollectionDetailView` in a sheet wrapped in a `NavigationStack` (so the collection title appears in the nav bar). Full-text search activates at 2+ characters.
 
 ### SwiftData queries
 `#Predicate` macros can't use enum member access inline — fetch all entries and filter in Swift instead.
