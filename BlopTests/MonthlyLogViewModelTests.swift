@@ -145,4 +145,43 @@ struct MonthlyLogViewModelTests {
         let carried = vm.carryForwardTasks(from: context)
         #expect(carried.isEmpty)
     }
+
+    @Test("carryForwardTasks excludes notes and events from the previous month")
+    func carryForwardExcludesNonTasks() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let vm = MonthlyLogViewModel()
+        vm.selectedYear = 2026
+        vm.selectedMonth = 5
+
+        let aprilDay = date(year: 2026, month: 4, day: 10)
+        let aprilLog = DailyLog(date: aprilDay)
+        context.insert(aprilLog)
+
+        let note = BulletEntry(content: "A note", type: .note)
+        note.dailyLog = aprilLog
+        context.insert(note)
+
+        let event = BulletEntry(content: "An event", type: .event)
+        event.dailyLog = aprilLog
+        context.insert(event)
+
+        try context.save()
+
+        let carried = vm.carryForwardTasks(from: context)
+        #expect(carried.isEmpty)
+    }
+
+    @Test("fetchOrCreateLog delegates to fetchOrCreate using the selected year and month")
+    func fetchOrCreateLogUsesSelectedYearMonth() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+        let vm = MonthlyLogViewModel()
+        vm.selectedYear = 2025
+        vm.selectedMonth = 8
+
+        let log = vm.fetchOrCreateLog(context: context)
+        #expect(log.year == 2025)
+        #expect(log.month == 8)
+    }
 }

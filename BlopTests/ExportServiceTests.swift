@@ -155,4 +155,89 @@ struct ExportServiceTests {
         #expect(output.contains("## Events"))
         #expect(output.contains("○ Team offsite"))
     }
+
+    @Test("exportDailyLog renders the Habits section with checked and unchecked items")
+    func dailyLogHabitSection() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+
+        let log = DailyLog(date: Date())
+        context.insert(log)
+
+        let h1 = HabitDefinition(name: "Exercise", sortOrder: 0)
+        let h2 = HabitDefinition(name: "Read", sortOrder: 1)
+        context.insert(h1)
+        context.insert(h2)
+
+        let done = HabitCompletion(habit: h1, date: log.date, completed: true)
+        done.dailyLog = log
+        context.insert(done)
+
+        let notDone = HabitCompletion(habit: h2, date: log.date, completed: false)
+        notDone.dailyLog = log
+        context.insert(notDone)
+
+        let service = ExportService()
+        let output = service.exportDailyLog(log)
+        #expect(output.contains("## Habits"))
+        #expect(output.contains("- [x] Exercise"))
+        #expect(output.contains("- [ ] Read"))
+    }
+
+    @Test("exportDailyLog renders a migrated entry with the right-arrow sigil")
+    func dailyLogMigratedEntry() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+
+        let log = DailyLog(date: Date())
+        context.insert(log)
+        let entry = BulletEntry(content: "Moved on", type: .task)
+        entry.status = .migrated
+        entry.dailyLog = log
+        context.insert(entry)
+
+        let service = ExportService()
+        let output = service.exportDailyLog(log)
+        #expect(output.contains("> Moved on"))
+    }
+
+    @Test("exportMonthlyLog omits Tasks and Events sections when log is empty")
+    func monthlyLogEmpty() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+
+        let log = MonthlyLog(year: 2026, month: 5)
+        context.insert(log)
+
+        let service = ExportService()
+        let output = service.exportMonthlyLog(log)
+        #expect(!output.contains("## Tasks"))
+        #expect(!output.contains("## Events"))
+    }
+
+    @Test("exportDailyLog appends asterisk based on isPriority flag, not the signifier property")
+    func exportUsesPriorityFlagNotSignifier() throws {
+        let container = try makeContainer()
+        let context = ModelContext(container)
+
+        let log = DailyLog(date: Date())
+        context.insert(log)
+
+        // signifier = .priority but isPriority = false → no asterisk in output
+        let entry = BulletEntry(content: "Signifier only", type: .task)
+        entry.isPriority = false
+        entry.signifier = .priority
+        entry.dailyLog = log
+        context.insert(entry)
+
+        let service = ExportService()
+        let output = service.exportDailyLog(log)
+        #expect(output.contains("• Signifier only"))
+        #expect(!output.contains("• Signifier only *"))
+    }
+
+    @Test("ExportError.accessDenied has a non-nil localised description")
+    func exportErrorDescription() {
+        #expect(ExportError.accessDenied.errorDescription != nil)
+    }
 }
