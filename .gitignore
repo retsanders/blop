@@ -37,3 +37,7 @@ Icon?
 
 # Instruments
 *.trace
+
+# VS Code
+.vscode/
+*.code-workspace
